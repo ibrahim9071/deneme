@@ -22,6 +22,7 @@ STATE_FILE_NAME = os.getenv("STATE_FILE_NAME", "fixtv.json")
 GITHUB_STEP_SUMMARY = os.getenv("GITHUB_STEP_SUMMARY")
 
 STREAM_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+STREAM_REFERER = "https://vidmody.com/"
 
 # Logo ve yazı opaklık ayarları (0.0 - 1.0 arası)
 LOGO_OPACITY = float(os.getenv("LOGO_OPACITY", "0.4"))
@@ -72,7 +73,10 @@ def update_local_state(index, seconds, url=""):
 
 def get_m3u_playlist(m3u_url):
     try:
-        headers = {'User-Agent': STREAM_USER_AGENT}
+        headers = {
+            'User-Agent': STREAM_USER_AGENT,
+            'Referer': STREAM_REFERER
+        }
         response = requests.get(m3u_url, headers=headers, timeout=15)
         if response.status_code == 200:
             lines = response.text.splitlines()
@@ -190,7 +194,20 @@ def start_m3u_stream():
         print(f"⏱️ Başlangıç Saniyesi: {last_seconds}")
         print(f"🚀 Hedef RTMP       : {RTMP_SERVER}")
 
-        headers_arg = f"User-Agent: {STREAM_USER_AGENT}\r\n"
+        # HTTP Headers'a hem User-Agent hem de Referer eklendi
+        headers_arg = f"User-Agent: {STREAM_USER_AGENT}\r\nReferer: {STREAM_REFERER}\r\n"
+
+        # Vidmody 403 engellerini ve bozuk playlist segmentlerini pas geçiren bayraklar
+        input_options = [
+            '-headers', headers_arg,
+            '-allowed_extensions', 'ALL',
+            '-err_detect', 'ignore_err',
+            '-reconnect', '1',
+            '-reconnect_streamed', '1',
+            '-reconnect_delay_max', '5',
+            '-ss', str(last_seconds),
+            '-re'
+        ]
 
         # --- ÇİFT LİNK VEYA TEK LİNK KONTROLÜ ---
         if ";" in target_stream_url:
@@ -201,32 +218,12 @@ def start_m3u_stream():
             print(f"🎥 Video Bağlantısı : {video_url}")
             print(f"🔊 Ses Bağlantısı   : {audio_url}")
 
-            input_args = [
-                '-headers', headers_arg,
-                '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5',
-                '-ss', str(last_seconds),
-                '-re',
-                '-i', video_url,
-                '-headers', headers_arg,
-                '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5',
-                '-ss', str(last_seconds),
-                '-re',
-                '-i', audio_url
-            ]
-            # Çift link durumunda ses 2. girdi olan audio_url'den (1:a:0) alınır
+            input_args = input_options + ['-i', video_url] + input_options + ['-i', audio_url]
             audio_map = ['-map', '1:a:0?']
             logo1_input_index = 2
         else:
             print(f"📡 Kaynak Yayın     : {target_stream_url}")
-            input_args = [
-                '-headers', headers_arg,
-                '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5',
-                '-ss', str(last_seconds),
-                '-re',
-                '-i', target_stream_url
-            ]
-            # YAPIŞTIRILAN DÜZELTME:
-            # '-map', '0:a?' yerine sadece ILK ses akışını almak için '-map', '0:a:0?' kullanıldı.
+            input_args = input_options + ['-i', target_stream_url]
             audio_map = ['-map', '0:a:0?']
             logo1_input_index = 1
 
