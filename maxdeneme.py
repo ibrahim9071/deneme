@@ -189,18 +189,23 @@ def start_m3u_stream():
         write_title_file(film_title)
 
         print("=" * 60)
-        print("📺 Maxanimasyon Canlı Aktarım Yayını (1080p 30fps - 2000k) Başlatılıyor")
+        print("📺 Maxanimasyon Canlı Aktarım Yayını (1080p 25fps - 2500k) Başlatılıyor")
         print(f"🎬 Oynatılan İçerik  : {film_title}")
         print(f"⏱️ Başlangıç Saniyesi: {last_seconds}")
         print(f"🚀 Hedef RTMP       : {RTMP_SERVER}")
 
-        # HTTP Headers'a hem User-Agent hem de Referer eklendi
-        headers_arg = f"User-Agent: {STREAM_USER_AGENT}\r\nReferer: {STREAM_REFERER}\r\n"
+        # Anti-Hotlink 403 engellerini aşmak için Referer ve Origin eklenmiş HTTP başlığı
+        headers_arg = (
+            f"User-Agent: {STREAM_USER_AGENT}\r\n"
+            f"Referer: https://vidmody.com/\r\n"
+            f"Origin: https://vidmody.com\r\n"
+        )
 
-        # Vidmody 403 engellerini ve bozuk playlist segmentlerini pas geçiren bayraklar
+        # Vidmody 403 engellerini ve bozuk resim/playlist segmentlerini es geçen FFmpeg bayrakları
         input_options = [
             '-headers', headers_arg,
             '-allowed_extensions', 'ALL',
+            '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
             '-err_detect', 'ignore_err',
             '-reconnect', '1',
             '-reconnect_streamed', '1',
@@ -245,7 +250,7 @@ def start_m3u_stream():
             filter_str = (
                 '[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,'
                 'pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=25[main];'
-                f'[{logo1_input_index}:v]scale=-2:91,format=rgba,'
+                f'[{logo1_input_index}:v]scale=-2:87,format=rgba,'
                 f'colorchannelmixer=aa={LOGO_OPACITY}[logo1];'
                 '[main][logo1]overlay=main_w-overlay_w-104:80[tmp];'
                 f'[tmp]{title_drawtext}[v]'
@@ -254,7 +259,7 @@ def start_m3u_stream():
             logo_inputs = []
             filter_str = (
                 '[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,'
-                'pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=25[main];'
+                'pad=1920:1080:(ow-ih)/2:(oh-ih)/2:black,fps=25[main];'
                 f'[main]{title_drawtext}[v]'
             )
 
@@ -268,10 +273,10 @@ def start_m3u_stream():
             '-preset', 'veryfast',
             '-pix_fmt', 'yuv420p',
             '-r', '25',
-            '-b:v', '3500k',
-            '-maxrate', '3500k',
-            '-bufsize', '4000k',
-            '-g', '60',
+            '-b:v', '2500k',
+            '-maxrate', '2500k',
+            '-bufsize', '3000k',
+            '-g', '50',
             '-c:a', 'aac',
             '-b:a', '128k',
             '-ac', '2',
@@ -280,7 +285,7 @@ def start_m3u_stream():
             RTMP_SERVER
         ]
 
-        print("▶ FFmpeg başlatıldı, 1080p 30fps @ 2000k yayın iletiliyor...")
+        print("▶ FFmpeg başlatıldı, 1080p 25fps @ 2500k yayın iletiliyor...")
 
         process = subprocess.Popen(
             command,
