@@ -12,17 +12,16 @@ from collections import deque
 
 # ===================== AYARLAR =====================
 RTMP_URL = "rtmp://ssh101.bozztv.com:1935/ssh101"
-STREAM_KEY = os.getenv("STREAM_KEY") or "maxtv"
+STREAM_KEY = os.getenv("STREAM_KEY") or "fixtv"
 RTMP_SERVER = f"{RTMP_URL}/{STREAM_KEY}"
 
 M3U_URL = os.getenv("M3U_URL") or "https://raw.githubusercontent.com/ino8090/0101/refs/heads/main/yerli.m3u"
-LOGO_URL = os.getenv("LOGO_URL") or "https://raw.githubusercontent.com/ino8090/0101/refs/heads/main/file_000000007be48210a068edefa7260629.png"
+LOGO_URL = os.getenv("LOGO_URL") or "https://raw.githubusercontent.com/ino8090/0101/refs/heads/main/1788318046234.png"
 
 STATE_FILE_NAME = os.getenv("STATE_FILE_NAME", "fixtv.json")
 GITHUB_STEP_SUMMARY = os.getenv("GITHUB_STEP_SUMMARY")
 
 STREAM_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-STREAM_REFERER = "https://vidmody.com/"
 
 # Logo ve yazı opaklık ayarları (0.0 - 1.0 arası)
 LOGO_OPACITY = float(os.getenv("LOGO_OPACITY", "0.4"))
@@ -73,10 +72,7 @@ def update_local_state(index, seconds, url=""):
 
 def get_m3u_playlist(m3u_url):
     try:
-        headers = {
-            'User-Agent': STREAM_USER_AGENT,
-            'Referer': STREAM_REFERER
-        }
+        headers = {'User-Agent': STREAM_USER_AGENT}
         response = requests.get(m3u_url, headers=headers, timeout=15)
         if response.status_code == 200:
             lines = response.text.splitlines()
@@ -101,6 +97,8 @@ def get_m3u_playlist(m3u_url):
 
 def download_logo():
     headers = {'User-Agent': STREAM_USER_AGENT}
+    
+    # 1. Logo İndir
     try:
         response = requests.get(LOGO_URL, headers=headers, timeout=15)
         if response.status_code == 200 and len(response.content) > 0:
@@ -178,6 +176,10 @@ def start_m3u_stream():
         target_stream_url = current_item["url"]
         film_title = current_item["title"]
 
+        # --- LİNK DEĞİŞİKLİĞİ KONTROLÜ ---
+        # Aynı indeksteki filmin linki, kaldığımız yerden devam ederken değiştiyse
+        # (kullanıcı o filmin linkini güncellediyse), bu artık "yeni" bir video demektir.
+        # Bu yüzden kaldığı saniyeden değil, baştan (0. saniyeden) başlatılır.
         if last_seconds > 0 and last_url and target_stream_url != last_url:
             print(f"🔄 Bu sıradaki ({current_index + 1}) içeriğin linki değişmiş, video baştan başlatılacak.")
             print(f"   Eski link: {last_url}")
@@ -189,32 +191,14 @@ def start_m3u_stream():
         write_title_file(film_title)
 
         print("=" * 60)
-        print("📺 Maxanimasyon Canlı Aktarım Yayını (1080p 25fps - 2500k) Başlatılıyor")
+        print("📺 Maxanimasyon Canlı Aktarım Yayını (1080p 30fps - 2000k) Başlatılıyor")
         print(f"🎬 Oynatılan İçerik  : {film_title}")
         print(f"⏱️ Başlangıç Saniyesi: {last_seconds}")
         print(f"🚀 Hedef RTMP       : {RTMP_SERVER}")
 
-        # Anti-Hotlink 403 engellerini aşmak için Referer ve Origin eklenmiş HTTP başlığı
-        headers_arg = (
-            f"User-Agent: {STREAM_USER_AGENT}\r\n"
-            f"Referer: https://vidmody.com/\r\n"
-            f"Origin: https://vidmody.com\r\n"
-        )
+        headers_arg = f"User-Agent: {STREAM_USER_AGENT}\r\n"
 
-        # Vidmody 403 engellerini ve bozuk resim/playlist segmentlerini es geçen FFmpeg bayrakları
-        input_options = [
-            '-headers', headers_arg,
-            '-allowed_extensions', 'ALL',
-            '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
-            '-err_detect', 'ignore_err',
-            '-reconnect', '1',
-            '-reconnect_streamed', '1',
-            '-reconnect_delay_max', '5',
-            '-ss', str(last_seconds),
-            '-re'
-        ]
-
-        # --- ÇİFT LİNK VEYA TEK LİNK KONTROLÜ ---
+        # --- ÇİFT LİNK (VIDEO + SES SEPARATÖRÜ: ;) VE TEK LİNK KONTROLÜ ---
         if ";" in target_stream_url:
             video_url, audio_url = target_stream_url.split(";", 1)
             video_url = video_url.strip()
@@ -223,14 +207,33 @@ def start_m3u_stream():
             print(f"🎥 Video Bağlantısı : {video_url}")
             print(f"🔊 Ses Bağlantısı   : {audio_url}")
 
-            input_args = input_options + ['-i', video_url] + input_options + ['-i', audio_url]
-            audio_map = ['-map', '1:a:0?']
+            input_args = [
+                '-headers', headers_arg,
+                '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5',
+                '-ss', str(last_seconds),
+                '-re',
+                '-i', video_url,
+                '-headers', headers_arg,
+                '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5',
+                '-ss', str(last_seconds),
+                '-re',
+                '-i', audio_url
+            ]
+            audio_map = ['-map', '1:a:0']
             logo1_input_index = 2
+            logo2_input_index = 3
         else:
             print(f"📡 Kaynak Yayın     : {target_stream_url}")
-            input_args = input_options + ['-i', target_stream_url]
-            audio_map = ['-map', '0:a:0?']
+            input_args = [
+                '-headers', headers_arg,
+                '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5',
+                '-ss', str(last_seconds),
+                '-re',
+                '-i', target_stream_url
+            ]
+            audio_map = ['-map', '0:a?']
             logo1_input_index = 1
+            logo2_input_index = 2
 
         print("=" * 60)
 
@@ -239,6 +242,8 @@ def start_m3u_stream():
 
         has_logo1 = os.path.exists('logo.png') and os.path.getsize('logo.png') > 0
 
+        # Sağ üstteki logo kaldırıldı; soldaki logo artık sağ üst köşeye taşındı.
+        # Film adı, sol alt köşede yarı saydam kutu içinde, kalın fontla gösteriliyor.
         title_drawtext = (
             f"drawtext=textfile='title.txt':reload=1:fontfile='{BOLD_FONT_PATH}':"
             f"fontcolor=white@{TEXT_OPACITY}:fontsize=30:"
@@ -250,16 +255,16 @@ def start_m3u_stream():
             filter_str = (
                 '[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,'
                 'pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=25[main];'
-                f'[{logo1_input_index}:v]scale=-2:87,format=rgba,'
+                f'[{logo1_input_index}:v]scale=-2:100,format=rgba,'
                 f'colorchannelmixer=aa={LOGO_OPACITY}[logo1];'
-                '[main][logo1]overlay=main_w-overlay_w-104:80[tmp];'
+                '[main][logo1]overlay=main_w-overlay_w-113:89[tmp];'
                 f'[tmp]{title_drawtext}[v]'
             )
         else:
             logo_inputs = []
             filter_str = (
                 '[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,'
-                'pad=1920:1080:(ow-ih)/2:(oh-ih)/2:black,fps=25[main];'
+                'pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=25[main];'
                 f'[main]{title_drawtext}[v]'
             )
 
@@ -273,19 +278,18 @@ def start_m3u_stream():
             '-preset', 'veryfast',
             '-pix_fmt', 'yuv420p',
             '-r', '25',
-            '-b:v', '2500k',
-            '-maxrate', '2500k',
-            '-bufsize', '3000k',
-            '-g', '50',
+            '-b:v', '3500k',
+            '-maxrate', '3500k',
+            '-bufsize', '4000k',
+            '-g', '60',
             '-c:a', 'aac',
             '-b:a', '128k',
-            '-ac', '2',
             '-ar', '44100',
             '-f', 'flv',
             RTMP_SERVER
         ]
 
-        print("▶ FFmpeg başlatıldı, 1080p 25fps @ 2500k yayın iletiliyor...")
+        print("▶ FFmpeg başlatıldı, 1080p 30fps @ 2000k yayın iletiliyor...")
 
         process = subprocess.Popen(
             command,
