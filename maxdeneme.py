@@ -200,18 +200,18 @@ def start_m3u_stream():
             f"Origin: https://vidmody.com\r\n"
         )
 
-        # GÜNCELLENEN KISIM: -re parametresi kaldırıldı, timeout ve reconnect eklendi.
+        # FFmpeg kilitlenmesini engelleyen hızlı bağlantı ve atlama ayarları
         input_options = [
             '-headers', headers_arg,
             '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
             '-err_detect', 'ignore_err',
+            '-analyzeduration', '2000000',
+            '-probesize', '2000000',
             '-reconnect', '1',
             '-reconnect_at_eof', '1',
             '-reconnect_streamed', '1',
-            '-reconnect_delay_max', '5',
-            '-timeout', '10000000',
-            '-rw_timeout', '10000000',
-            '-ss', str(last_seconds)
+            '-reconnect_delay_max', '2',
+            '-rw_timeout', '10000000'
         ]
 
         if ";" in target_stream_url:
@@ -222,12 +222,16 @@ def start_m3u_stream():
             print(f"🎥 Video Bağlantısı : {video_url}")
             print(f"🔊 Ses Bağlantısı   : {audio_url}")
 
-            input_args = input_options + ['-i', video_url] + input_options + ['-i', audio_url]
+            # -ss parametreleri en başa çekilerek doğrudan hedeflenen segmentten indirme yapılması sağlandı
+            input_args = (
+                ['-ss', str(last_seconds)] + input_options + ['-i', video_url] +
+                ['-ss', str(last_seconds)] + input_options + ['-i', audio_url]
+            )
             audio_map = ['-map', '1:a:0?']
             logo1_input_index = 2
         else:
             print(f"📡 Kaynak Yayın     : {target_stream_url}")
-            input_args = input_options + ['-i', target_stream_url]
+            input_args = ['-ss', str(last_seconds)] + input_options + ['-i', target_stream_url]
             audio_map = ['-map', '0:a:0?']
             logo1_input_index = 1
 
