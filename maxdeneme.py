@@ -194,26 +194,26 @@ def start_m3u_stream():
         print(f"⏱️ Başlangıç Saniyesi: {last_seconds}")
         print(f"🚀 Hedef RTMP       : {RTMP_SERVER}")
 
-        # Anti-Hotlink 403 engellerini aşmak için Referer ve Origin eklenmiş HTTP başlığı
         headers_arg = (
             f"User-Agent: {STREAM_USER_AGENT}\r\n"
             f"Referer: https://vidmody.com/\r\n"
             f"Origin: https://vidmody.com\r\n"
         )
 
-        # -allowed_extensions kaldırıldı (Genel girdi kaynaklarında hata vermemesi için)
+        # GÜNCELLENEN KISIM: -re parametresi kaldırıldı, timeout ve reconnect eklendi.
         input_options = [
             '-headers', headers_arg,
             '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
             '-err_detect', 'ignore_err',
             '-reconnect', '1',
+            '-reconnect_at_eof', '1',
             '-reconnect_streamed', '1',
             '-reconnect_delay_max', '5',
-            '-ss', str(last_seconds),
-            '-re'
+            '-timeout', '10000000',
+            '-rw_timeout', '10000000',
+            '-ss', str(last_seconds)
         ]
 
-        # --- ÇİFT LİNK VEYA TEK LİNK KONTROLÜ ---
         if ";" in target_stream_url:
             video_url, audio_url = target_stream_url.split(";", 1)
             video_url = video_url.strip()
