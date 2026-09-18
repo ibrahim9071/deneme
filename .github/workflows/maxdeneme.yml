@@ -4,6 +4,11 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+# Çift yayın çalışmasını ve çakışmayı önleyen kural
+concurrency:
+  group: fixtv-stream
+  cancel-in-progress: true
+
 jobs:
   yayin:
     runs-on: ubuntu-latest
@@ -56,4 +61,4 @@ jobs:
           -H "Authorization: token $GH_TOKEN" \
           -H "Accept: application/vnd.github+json" \
           "https://api.github.com/repos/${{ github.repository }}/actions/workflows/maxdeneme.yml/dispatches" \
-          -d '{"ref":"${{ github.ref_name }}"}'
+          -d '{"ref":"main"}'
