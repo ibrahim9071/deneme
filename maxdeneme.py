@@ -10,7 +10,7 @@ import json
 import requests
 from collections import deque
 
-# yt-dlp modülünü otomatik yükleme veya çağırma kontrolü
+# yt-dlp modülünü otomatik yükleme kontrolü
 try:
     import yt_dlp
 except ImportError:
@@ -76,7 +76,7 @@ def update_local_state(index, seconds, url=""):
 
 
 def extract_real_m3u8(url):
-    """Web (Vidmody/vs vb.) sayfalarından yt-dlp kullanarak doğrudan oynatılabilir .m3u8 linkini çıkarır."""
+    """Web (Vidmody/vs vb.) sayfalarından yt-dlp kullanarak doğrudan oynatılabilir adresi ayrıştırır."""
     if ".m3u8" in url.lower() and "vidmody.com/vs/" not in url.lower():
         return url, STREAM_USER_AGENT, STREAM_REFERER
 
@@ -224,7 +224,6 @@ def start_m3u_stream():
 
         last_url = raw_stream_url
 
-        # yt-dlp ile web sayfasından gerçek .m3u8 adresini ve başlık parametrelerini çıkar
         target_stream_url, active_ua, active_ref = extract_real_m3u8(raw_stream_url)
 
         write_title_file(film_title)
@@ -242,12 +241,10 @@ def start_m3u_stream():
             "Accept: */*\r\n"
         )
 
-        # .jpg uzantılı gizlenmiş HLS segmentlerinin (MPEG-TS) okunmasını sağlayan parametreler eklendi
         input_options = [
             '-headers', headers_arg,
             '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
             '-allowed_extensions', 'ALL',
-            '-extension', 'ALL',
             '-err_detect', 'ignore_err',
             '-analyzeduration', '2000000',
             '-probesize', '2000000',
