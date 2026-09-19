@@ -194,13 +194,14 @@ def start_m3u_stream():
         print(f"⏱️ Başlangıç Saniyesi: {last_seconds}")
         print(f"🚀 Hedef RTMP       : {RTMP_SERVER}")
 
+        # HTTP 403 Forbidden hatalarını engellemek için tam header bloğu
         headers_arg = (
             f"User-Agent: {STREAM_USER_AGENT}\r\n"
-            f"Referer: https://vidmody.com/\r\n"
+            f"Referer: {STREAM_REFERER}\r\n"
             f"Origin: https://vidmody.com\r\n"
+            "Accept: */*\r\n"
         )
 
-        # FFmpeg kilitlenmesini engelleyen hızlı bağlantı ve atlama ayarları
         input_options = [
             '-headers', headers_arg,
             '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
@@ -222,7 +223,6 @@ def start_m3u_stream():
             print(f"🎥 Video Bağlantısı : {video_url}")
             print(f"🔊 Ses Bağlantısı   : {audio_url}")
 
-            # -ss parametreleri en başa çekilerek doğrudan hedeflenen segmentten indirme yapılması sağlandı
             input_args = (
                 ['-ss', str(last_seconds)] + input_options + ['-i', video_url] +
                 ['-ss', str(last_seconds)] + input_options + ['-i', audio_url]
@@ -245,7 +245,7 @@ def start_m3u_stream():
         title_drawtext = (
             f"drawtext=textfile='title.txt':reload=1:fontfile='{BOLD_FONT_PATH}':"
             f"fontcolor=white@{TEXT_OPACITY}:fontsize=30:"
-            f"x=80:y=main_h-th-58"
+            f"x=80:y=main_h-th-67"
         )
 
         if has_logo1:
