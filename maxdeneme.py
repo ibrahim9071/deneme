@@ -75,10 +75,23 @@ def update_local_state(index, seconds, url=""):
         print(f"⚠️ Yerel state yazma hatası: {e}")
 
 
+def sanitize_url_to_m3u8(url):
+    """Sahte .gif, .jpg veya parametreli uzantıları temizleyip zorunlu .m3u8 yapar."""
+    if not url:
+        return url
+    
+    # URL üzerindeki sahte .gif uzantısını .m3u8 ile değiştir
+    if ".gif" in url:
+        url = re.sub(r'\.gif(\?.*)?$', '.m3u8\\1', url)
+        url = url.replace('.gif', '.m3u8')
+        
+    return url
+
+
 def extract_real_m3u8(url):
-    """Web (Vidmody/vs vb.) sayfalarından yt-dlp kullanarak doğrudan oynatılabilir adresi ayrıştırır."""
+    """Web sayfalarından adresi çıkarır ve uzantıyı .m3u8 olarak düzeltir."""
     if ".m3u8" in url.lower() and "vidmody.com/vs/" not in url.lower():
-        return url, STREAM_USER_AGENT, STREAM_REFERER
+        return sanitize_url_to_m3u8(url), STREAM_USER_AGENT, STREAM_REFERER
 
     print(f"🔍 yt-dlp ile gerçek .m3u8 adresi ayrıştırılıyor: {url}")
     ydl_opts = {
@@ -88,6 +101,10 @@ def extract_real_m3u8(url):
         'referer': STREAM_REFERER,
     }
 
+    extracted_url = url
+    ua = STREAM_USER_AGENT
+    ref = STREAM_REFERER
+
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -96,20 +113,20 @@ def extract_real_m3u8(url):
                 http_headers = info.get('http_headers', {})
                 ua = http_headers.get('User-Agent', STREAM_USER_AGENT)
                 ref = http_headers.get('Referer', STREAM_REFERER)
-                print(f"🎯 Gerçek Akış Adresi Bulundu: {extracted_url[:80]}...")
-                return extracted_url, ua, ref
             elif 'formats' in info and len(info['formats']) > 0:
                 best_format = info['formats'][-1]
                 extracted_url = best_format['url']
                 http_headers = best_format.get('http_headers', {})
                 ua = http_headers.get('User-Agent', STREAM_USER_AGENT)
                 ref = http_headers.get('Referer', STREAM_REFERER)
-                print(f"🎯 Gerçek Akış Adresi Bulundu (Format): {extracted_url[:80]}...")
-                return extracted_url, ua, ref
     except Exception as e:
         print(f"⚠️ yt-dlp ayrıştırma hatası: {e}. Orijinal URL ile devam ediliyor.")
 
-    return url, STREAM_USER_AGENT, STREAM_REFERER
+    # .gif uzantısı .m3u8 olarak düzeltiliyor
+    final_url = sanitize_url_to_m3u8(extracted_url)
+    print(f"🎯 Dönüştürülen Akış Adresi (.m3u8): {final_url[:80]}...")
+    
+    return final_url, ua, ref
 
 
 def get_m3u_playlist(m3u_url):
@@ -257,8 +274,8 @@ def start_m3u_stream():
 
         if ";" in target_stream_url:
             video_url, audio_url = target_stream_url.split(";", 1)
-            video_url = video_url.strip()
-            audio_url = audio_url.strip()
+            video_url = sanitize_url_to_m3u8(video_url.strip())
+            audio_url = sanitize_url_to_m3u8(audio_url.strip())
 
             print(f"🎥 Video Bağlantısı : {video_url}")
             print(f"🔊 Ses Bağlantısı   : {audio_url}")
