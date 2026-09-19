@@ -10,6 +10,14 @@ import json
 import requests
 from collections import deque
 
+# yt-dlp modülünü otomatik yükleme veya çağırma kontrolü
+try:
+    import yt_dlp
+except ImportError:
+    print("📦 'yt-dlp' kütüphanesi eksik, otomatik yükleniyor...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "yt-dlp"])
+    import yt_dlp
+
 # ===================== AYARLAR =====================
 RTMP_URL = "rtmp://ssh101.bozztv.com:1935/ssh101"
 STREAM_KEY = os.getenv("STREAM_KEY") or "maxtv"
@@ -18,20 +26,18 @@ RTMP_SERVER = f"{RTMP_URL}/{STREAM_KEY}"
 M3U_URL = os.getenv("M3U_URL") or "https://raw.githubusercontent.com/ino8090/0101/refs/heads/main/yerli.m3u"
 LOGO_URL = os.getenv("LOGO_URL") or "https://raw.githubusercontent.com/ino8090/0101/refs/heads/main/file_000000007be48210a068edefa7260629.png"
 
-STATE_FILE_NAME = os.getenv("STATE_FILE_NAME", "fixtv.json")
+STATE_FILE_NAME = os.getenv("STATE_FILE_NAME", "state_fixtv.json")
 GITHUB_STEP_SUMMARY = os.getenv("GITHUB_STEP_SUMMARY")
 
 STREAM_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 STREAM_REFERER = "https://vidmody.com/"
 
-# Logo ve yazı opaklık ayarları (0.0 - 1.0 arası)
 LOGO_OPACITY = float(os.getenv("LOGO_OPACITY", "0.4"))
 TEXT_OPACITY = float(os.getenv("TEXT_OPACITY", "0.5"))
 BOLD_FONT_PATH = os.getenv("BOLD_FONT_PATH", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
 
 
 def format_hms(total_seconds):
-    """Saniyeyi SS:DD:SS formatına çevirir."""
     total_seconds = int(total_seconds)
     hrs = total_seconds // 3600
     mins = (total_seconds % 3600) // 60
@@ -40,7 +46,6 @@ def format_hms(total_seconds):
 
 
 def get_local_state():
-    """Yerel state dosyasından son durumu okur (indeks, saniye, o an oynayan linkin URL'si)."""
     if os.path.exists(STATE_FILE_NAME):
         if os.path.getsize(STATE_FILE_NAME) == 0:
             print(f"⚠️ Yerel state dosyası boş ({STATE_FILE_NAME}), 0'dan başlanıyor.")
@@ -61,7 +66,6 @@ def get_local_state():
 
 
 def update_local_state(index, seconds, url=""):
-    """Son konumu (indeks, saniye) ve o an oynayan linkin URL'sini yerel state dosyasına kaydeder."""
     try:
         data = {"last_index": int(index), "last_seconds": int(seconds), "last_url": url}
         with open(STATE_FILE_NAME, "w", encoding="utf-8") as f:
@@ -69,6 +73,43 @@ def update_local_state(index, seconds, url=""):
         print(f"💾 Konum yerel dosyaya kaydedildi => İndeks: {index}, Saniye: {int(seconds)}")
     except Exception as e:
         print(f"⚠️ Yerel state yazma hatası: {e}")
+
+
+def extract_real_m3u8(url):
+    """Web (Vidmody/vs vb.) sayfalarından yt-dlp kullanarak doğrudan oynatılabilir .m3u8 linkini çıkarır."""
+    if ".m3u8" in url.lower() and "vidmody.com/vs/" not in url.lower():
+        return url, STREAM_USER_AGENT, STREAM_REFERER
+
+    print(f"🔍 yt-dlp ile gerçek .m3u8 adresi ayrıştırılıyor: {url}")
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'user_agent': STREAM_USER_AGENT,
+        'referer': STREAM_REFERER,
+    }
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            if 'url' in info:
+                extracted_url = info['url']
+                http_headers = info.get('http_headers', {})
+                ua = http_headers.get('User-Agent', STREAM_USER_AGENT)
+                ref = http_headers.get('Referer', STREAM_REFERER)
+                print(f"🎯 Gerçek Akış Adresi Bulundu: {extracted_url[:80]}...")
+                return extracted_url, ua, ref
+            elif 'formats' in info and len(info['formats']) > 0:
+                best_format = info['formats'][-1]
+                extracted_url = best_format['url']
+                http_headers = best_format.get('http_headers', {})
+                ua = http_headers.get('User-Agent', STREAM_USER_AGENT)
+                ref = http_headers.get('Referer', STREAM_REFERER)
+                print(f"🎯 Gerçek Akış Adresi Bulundu (Format): {extracted_url[:80]}...")
+                return extracted_url, ua, ref
+    except Exception as e:
+        print(f"⚠️ yt-dlp ayrıştırma hatası: {e}. Orijinal URL ile devam ediliyor.")
+
+    return url, STREAM_USER_AGENT, STREAM_REFERER
 
 
 def get_m3u_playlist(m3u_url):
@@ -112,7 +153,6 @@ def download_logo():
 
 
 def write_title_file(title):
-    """Şu an oynayan içeriğin adını, drawtext filtresinin okuyacağı dosyaya yazar."""
     try:
         with open('title.txt', 'w', encoding='utf-8') as f:
             f.write(title)
@@ -175,16 +215,17 @@ def start_m3u_stream():
             last_url = ""
 
         current_item = playlist[current_index]
-        target_stream_url = current_item["url"]
+        raw_stream_url = current_item["url"]
         film_title = current_item["title"]
 
-        if last_seconds > 0 and last_url and target_stream_url != last_url:
+        if last_seconds > 0 and last_url and raw_stream_url != last_url:
             print(f"🔄 Bu sıradaki ({current_index + 1}) içeriğin linki değişmiş, video baştan başlatılacak.")
-            print(f"   Eski link: {last_url}")
-            print(f"   Yeni link: {target_stream_url}")
             last_seconds = 0
 
-        last_url = target_stream_url
+        last_url = raw_stream_url
+
+        # yt-dlp ile web sayfasından gerçek .m3u8 adresini ve başlık parametrelerini çıkar
+        target_stream_url, active_ua, active_ref = extract_real_m3u8(raw_stream_url)
 
         write_title_file(film_title)
 
@@ -194,17 +235,19 @@ def start_m3u_stream():
         print(f"⏱️ Başlangıç Saniyesi: {last_seconds}")
         print(f"🚀 Hedef RTMP       : {RTMP_SERVER}")
 
-        # HTTP 403 Forbidden hatalarını engellemek için tam header bloğu
         headers_arg = (
-            f"User-Agent: {STREAM_USER_AGENT}\r\n"
-            f"Referer: {STREAM_REFERER}\r\n"
-            f"Origin: https://vidmody.com\r\n"
+            f"User-Agent: {active_ua}\r\n"
+            f"Referer: {active_ref}\r\n"
+            "Origin: https://vidmody.com\r\n"
             "Accept: */*\r\n"
         )
 
+        # .jpg uzantılı gizlenmiş HLS segmentlerinin (MPEG-TS) okunmasını sağlayan parametreler eklendi
         input_options = [
             '-headers', headers_arg,
             '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
+            '-allowed_extensions', 'ALL',
+            '-extension', 'ALL',
             '-err_detect', 'ignore_err',
             '-analyzeduration', '2000000',
             '-probesize', '2000000',
