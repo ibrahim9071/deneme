@@ -8,6 +8,8 @@ import os
 import re
 import json
 import requests
+import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta
 from collections import deque
 
 # ===================== AYARLAR =====================
@@ -19,6 +21,7 @@ M3U_URL = os.getenv("M3U_URL") or "https://raw.githubusercontent.com/ino8090/010
 LOGO_URL = os.getenv("LOGO_URL") or "https://raw.githubusercontent.com/ino8090/0101/refs/heads/main/file_000000001218821086dc1a6d6539a2b9.png"
 
 STATE_FILE_NAME = os.getenv("STATE_FILE_NAME", "state_tele5.json")
+EPG_FILE_NAME = "epg.xml"
 GITHUB_STEP_SUMMARY = os.getenv("GITHUB_STEP_SUMMARY")
 
 STREAM_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -29,6 +32,9 @@ LOGO_OPACITY = float(os.getenv("LOGO_OPACITY", "1.0"))
 TEXT_OPACITY = float(os.getenv("TEXT_OPACITY", "1.0"))
 BOLD_FONT_PATH = os.getenv("BOLD_FONT_PATH", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
 
+# Video süre önbelleği
+DURATION_CACHE = {}
+
 
 def format_hms(total_seconds):
     """Saniyeyi SS:DD:SS formatına çevirir."""
@@ -37,6 +43,71 @@ def format_hms(total_seconds):
     mins = (total_seconds % 3600) // 60
     secs = total_seconds % 60
     return f"{hrs:02d}:{mins:02d}:{secs:02d}"
+
+
+def get_video_duration(url):
+    """ffprobe kullanarak video süresini saniye cinsinden çeker."""
+    if url in DURATION_CACHE:
+        return DURATION_CACHE[url]
+    
+    clean_url = url.split(";")[0].strip() if ";" in url else url
+    try:
+        cmd = [
+            'ffprobe',
+            '-v', 'error',
+            '-show_entries', 'format=duration',
+            '-of', 'default=noprint_wrappers=1:nokey=1',
+            '-headers', f'User-Agent: {STREAM_USER_AGENT}\r\nReferer: {STREAM_REFERER}\r\n',
+            clean_url
+        ]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10)
+        duration = float(result.stdout.strip())
+        if duration > 0:
+            DURATION_CACHE[url] = duration
+            return duration
+    except Exception:
+        pass
+    
+    # ffprobe okuyamazsa varsayılan 90 dk (5400 sn) kabul edilir
+    return 5400.0
+
+
+def generate_epg(playlist, current_index, current_seconds):
+    """M3U listesinden XMLTV EPG dosyası üretir."""
+    try:
+        tv = ET.Element('tv', generator_info_name="Tele5 EPG Generator")
+
+        channel = ET.SubElement(tv, 'channel', id="tele5.tr")
+        display_name = ET.SubElement(channel, 'display-name')
+        display_name.text = "Tele5"
+
+        # Şimdiki zamandan oynatılan süreyi düşerek başlangıcı bul
+        running_time = datetime.now() - timedelta(seconds=current_seconds)
+        total_playlist = len(playlist)
+
+        # 24-48 saatlik akış akışı üretmek için listeyi 2 tur döndür
+        for i in range(total_playlist * 2):
+            idx = (current_index + i) % total_playlist
+            item = playlist[idx]
+            title = item["title"]
+            url = item["url"]
+
+            duration_seconds = get_video_duration(url)
+
+            start_str = running_time.strftime("%Y%m%d%H%M%S +0000")
+            end_time = running_time + timedelta(seconds=duration_seconds)
+            stop_str = end_time.strftime("%Y%m%d%H%M%S +0000")
+
+            programme = ET.SubElement(tv, 'programme', start=start_str, stop=stop_str, channel="tele5.tr")
+            prog_title = ET.SubElement(programme, 'title', lang="tr")
+            prog_title.text = title
+
+            running_time = end_time
+
+        tree = ET.ElementTree(tv)
+        tree.write(EPG_FILE_NAME, encoding="utf-8", xml_declaration=True)
+    except Exception as e:
+        print(f"⚠️ EPG oluşturma hatası: {e}")
 
 
 def get_local_state():
@@ -172,6 +243,9 @@ def start_m3u_stream():
         last_url = target_stream_url
         write_title_file(film_title)
 
+        # Yayın başlarken EPG'yi güncelle
+        generate_epg(playlist, current_index, last_seconds)
+
         headers_arg = (
             f"User-Agent: {STREAM_USER_AGENT}\r\n"
             f"Referer: https://vidmody.com/\r\n"
@@ -234,7 +308,7 @@ def start_m3u_stream():
             logo_inputs = []
             filter_str = (
                 '[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,'
-                'pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=25[main];'
+                'pad=1920:1080:(oh-ih)/2:(oh-ih)/2:black,fps=25[main];'
                 f'[main]{title_drawtext}[v]'
             )
 
@@ -294,6 +368,7 @@ def start_m3u_stream():
                     now = time.time()
                     if now - last_save_time > 30:
                         update_local_state(current_index, current_stream_seconds, target_stream_url)
+                        generate_epg(playlist, current_index, current_stream_seconds)
                         last_save_time = now
 
                     if now - last_dashboard_time > 30:
