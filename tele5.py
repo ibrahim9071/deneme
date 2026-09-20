@@ -15,8 +15,8 @@ RTMP_URL = "rtmp://ssh101.bozztv.com:1935/ssh101"
 STREAM_KEY = os.getenv("STREAM_KEY") or "tele5"
 RTMP_SERVER = f"{RTMP_URL}/{STREAM_KEY}"
 
-M3U_URL = os.getenv("M3U_URL") or "https://raw.githubusercontent.com/ino8090/0101/refs/heads/main/prasss.m3u"
-LOGO_URL = os.getenv("LOGO_URL") or "https://raw.githubusercontent.com/ino8090/0101/refs/heads/main/file_000000001218821086dc1a6d6539a2b9.png"
+M3U_URL = os.getenv("M3U_URL") or "https://raw.githubusercontent.com/ino8090/0101/refs/heads/main/yerli.m3u"
+LOGO_URL = os.getenv("LOGO_URL") or "https://resmim.net/cdn/2026/04/29/CbwlRC.png"
 
 STATE_FILE_NAME = os.getenv("STATE_FILE_NAME", "state_tele5.json")
 GITHUB_STEP_SUMMARY = os.getenv("GITHUB_STEP_SUMMARY")
@@ -25,8 +25,8 @@ STREAM_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.3
 STREAM_REFERER = "https://vidmody.com/"
 
 # Logo ve yazı opaklık ayarları
-LOGO_OPACITY = float(os.getenv("LOGO_OPACITY", "1.0"))
-TEXT_OPACITY = float(os.getenv("TEXT_OPACITY", "1.0"))
+LOGO_OPACITY = float(os.getenv("LOGO_OPACITY", "0.4"))
+TEXT_OPACITY = float(os.getenv("TEXT_OPACITY", "0.5"))
 BOLD_FONT_PATH = os.getenv("BOLD_FONT_PATH", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
 
 
@@ -87,7 +87,6 @@ def get_m3u_playlist(m3u_url):
 
 
 def download_logo():
-    """Logoyu indirir, başarılı olamazsa local logo.png dosyasını siler."""
     headers = {'User-Agent': STREAM_USER_AGENT}
     try:
         response = requests.get(LOGO_URL, headers=headers, timeout=15)
@@ -123,7 +122,7 @@ def write_step_summary(title, index, playlist_len, seconds, status="🟢 Yayınd
         return
     try:
         content = (
-            "## 📺 Canlı Yayın Durumu (Maxanimasyon)\n\n"
+            "## 📺 Canlı Yayın Durumu (Tele5)\n\n"
             "| Alan | Değer |\n"
             "|---|---|\n"
             f"| 🎬 Şu an oynayan içerik | {title} |\n"
@@ -183,13 +182,13 @@ def start_m3u_stream():
             '-headers', headers_arg,
             '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',
             '-err_detect', 'ignore_err',
-            '-analyzeduration', '2000000',
-            '-probesize', '2000000',
+            '-analyzeduration', '3000000',
+            '-probesize', '3000000',
             '-reconnect', '1',
             '-reconnect_at_eof', '1',
             '-reconnect_streamed', '1',
-            '-reconnect_delay_max', '2',
-            '-rw_timeout', '10000000'
+            '-reconnect_delay_max', '5',
+            '-rw_timeout', '15000000'
         ]
 
         if ";" in target_stream_url:
@@ -226,9 +225,9 @@ def start_m3u_stream():
             filter_str = (
                 '[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,'
                 'pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=25[main];'
-                f'[{logo_input_index}:v]scale=-2:85,format=rgba,'
+                f'[{logo_input_index}:v]scale=-2:91,format=rgba,'
                 f'colorchannelmixer=aa={LOGO_OPACITY}[logo1];'
-                '[main][logo1]overlay=75:75[tmp];'
+                '[main][logo1]overlay=80:80[tmp];'
                 f'[tmp]{title_drawtext}[v]'
             )
         else:
@@ -240,23 +239,26 @@ def start_m3u_stream():
             )
 
         command = [
-            'ffmpeg'
+            'ffmpeg',
+            '-re'
         ] + input_args + logo_inputs + [
             '-filter_complex', filter_str,
             '-map', '[v]'
         ] + audio_map + [
             '-c:v', 'libx264',
-            '-preset', 'veryfast',
+            '-preset', 'superfast',
+            '-tune', 'zerolatency',
             '-pix_fmt', 'yuv420p',
             '-r', '25',
             '-b:v', '2500k',
             '-maxrate', '2500k',
-            '-bufsize', '3000k',
+            '-bufsize', '5000k',
             '-g', '50',
             '-c:a', 'aac',
             '-b:a', '128k',
             '-ac', '2',
             '-ar', '44100',
+            '-max_muxing_queue_size', '1024',
             '-f', 'flv',
             RTMP_SERVER
         ]
