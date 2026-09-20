@@ -1,4 +1,4 @@
-name: tele5
+Name: tele5
 on:
   push:
     branches: [ main ]
@@ -37,7 +37,7 @@ jobs:
     - name: 🚀 Yayını başlat
       env:
         STATE_FILE_NAME: "state_tele5.json"
-      run: python -u tele5py
+      run: python -u tele5.py
 
     - name: 💾 Son Durumu ve EPG Dosyasını Release Üzerinde Güncelle
       if: always()
