@@ -12,11 +12,11 @@ from collections import deque
 
 # ===================== AYARLAR =====================
 RTMP_URL = "rtmp://ssh101.bozztv.com:1935/ssh101"
-STREAM_KEY = os.getenv("STREAM_KEY") or "tele5"
+STREAM_KEY = os.getenv("STREAM_KEY") or "5tele"
 RTMP_SERVER = f"{RTMP_URL}/{STREAM_KEY}"
 
-M3U_URL = os.getenv("M3U_URL") or "https://raw.githubusercontent.com/ino8090/0101/refs/heads/main/yerli.m3u"
-LOGO_URL = os.getenv("LOGO_URL") or "https://resmim.net/cdn/2026/04/29/CbwlRC.png"
+M3U_URL = os.getenv("M3U_URL") or "https://raw.githubusercontent.com/ino8090/0101/refs/heads/main/prasss.m3u"
+LOGO_URL = os.getenv("LOGO_URL") or "https://raw.githubusercontent.com/ino8090/0101/refs/heads/main/file_000000001218821086dc1a6d6539a2b9.png"
 
 STATE_FILE_NAME = os.getenv("STATE_FILE_NAME", "state_tele5.json")
 GITHUB_STEP_SUMMARY = os.getenv("GITHUB_STEP_SUMMARY")
@@ -25,8 +25,8 @@ STREAM_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.3
 STREAM_REFERER = "https://vidmody.com/"
 
 # Logo ve yazı opaklık ayarları
-LOGO_OPACITY = float(os.getenv("LOGO_OPACITY", "0.4"))
-TEXT_OPACITY = float(os.getenv("TEXT_OPACITY", "0.5"))
+LOGO_OPACITY = float(os.getenv("LOGO_OPACITY", "1.0"))
+TEXT_OPACITY = float(os.getenv("TEXT_OPACITY", "1.0"))
 BOLD_FONT_PATH = os.getenv("BOLD_FONT_PATH", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
 
 
@@ -225,9 +225,9 @@ def start_m3u_stream():
             filter_str = (
                 '[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,'
                 'pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,fps=25[main];'
-                f'[{logo_input_index}:v]scale=-2:91,format=rgba,'
+                f'[{logo_input_index}:v]scale=-2:85,format=rgba,'
                 f'colorchannelmixer=aa={LOGO_OPACITY}[logo1];'
-                '[main][logo1]overlay=80:80[tmp];'
+                '[main][logo1]overlay=75:75[tmp];'
                 f'[tmp]{title_drawtext}[v]'
             )
         else:
