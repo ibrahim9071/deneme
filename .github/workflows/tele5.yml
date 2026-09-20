@@ -1,8 +1,12 @@
-name: Akasya
+Name: tele5
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
+
+concurrency:
+  group: tele5-stream
+  cancel-in-progress: true
 
 jobs:
   yayin:
@@ -28,18 +32,18 @@ jobs:
     - name: 📥 Kayıtlı State Dosyasını İndir
       continue-on-error: true
       run: |
-        curl -sL https://github.com/${{ github.repository }}/releases/download/state-data/state_akasya.json -o state_akasya.json
+        curl -sL https://github.com/${{ github.repository }}/releases/download/state-data/state_tele5.json -o state_tele5.json
 
     - name: 🚀 Yayını başlat
       env:
-        STATE_FILE_NAME: "state_akasya.json"
-      run: python -u akasya.py
+        STATE_FILE_NAME: "state_tele5.json"
+      run: python -u tele5.py
 
     - name: 💾 Son Durumu Release Üzerinde Güncelle
       if: always()
       uses: softprops/action-gh-release@v1
       with:
-        files: state_akasya.json
+        files: state_tele5.json
         tag_name: state-data
         name: "Yayın Kaldığı Yer (State)"
         draft: false
@@ -47,13 +51,13 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: 🔁 Süre doldu, yeni run'ı tetikle
-      if: '${{ !cancelled() }}'
+    - name: 🔁 Süre Doldu veya İptal Edildi, Yeni Run'ı Tetikle
+      if: always()
       env:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
       run: |
         curl -X POST \
           -H "Authorization: token $GH_TOKEN" \
           -H "Accept: application/vnd.github+json" \
-          "https://api.github.com/repos/${{ github.repository }}/actions/workflows/akasya.yml/dispatches" \
-          -d '{"ref":"${{ github.ref_name }}"}'
+          "https://api.github.com/repos/${{ github.repository }}/actions/workflows/tele5.yml/dispatches" \
+          -d '{"ref":"main"}'
