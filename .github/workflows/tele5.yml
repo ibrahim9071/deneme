@@ -1,4 +1,4 @@
-name: tele5
+Name: tele5
 on:
   push:
     branches: [ main ]
@@ -39,13 +39,15 @@ jobs:
         STATE_FILE_NAME: "state_tele5.json"
       run: python -u tele5.py
 
-    - name: 💾 Son Durumu Release Üzerinde Güncelle
+    - name: 💾 Son Durumu ve EPG Dosyasını Release Üzerinde Güncelle
       if: always()
       uses: softprops/action-gh-release@v1
       with:
-        files: state_tele5.json
+        files: |
+          state_tele5.json
+          epg.xml
         tag_name: state-data
-        name: "Yayın Kaldığı Yer (State)"
+        name: "Yayın Kaldığı Yer (State & EPG)"
         draft: false
         prerelease: false
       env:
