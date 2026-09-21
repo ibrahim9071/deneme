@@ -1,4 +1,4 @@
-name: tele5
+Namee: tele5
 on:
   push:
     branches: [ main ]
